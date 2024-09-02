@@ -1,0 +1,49 @@
+{
+    "Routes": [
+        {
+            "UpstreamPathTemplate": "/auth",
+            "UpstreamHttpMethod": [ "Post" ],
+            "DownstreamScheme": "https",
+            "DownstreamPathTemplate": "/auth",
+            "DownstreamHostAndPorts": [
+                {
+                    "Host": "localhost",
+                    "Port": 5002
+                }
+            ]
+        },
+        {
+            "UpstreamPathTemplate": "/weatherforecast",
+            "UpstreamHttpMethod": [ "Get" ],
+            "DownstreamPathTemplate": "/weatherforecast",
+            "DownstreamScheme": "https",
+            "DownstreamHostAndPorts": [
+                {
+                    "Host": "localhost",
+                    "Port": 7190
+                }
+            ],
+            "AuthenticationOptions": {
+                "AuthenticationProviderKey": "Bearer",
+                "AllowedScopes": [ "weather.read" ]
+            },
+            "RouteClaimsRequirement": {
+                "role": "Administrator"
+            }
+        }
+    ],
+    "GlobalConfiguration": {
+        "BaseUrl": "https://localhost:5000",
+        "FileCacheOptions": {
+            "TtlSeconds": 60, // Tiempo de vida en segundos
+            "Region": "default" // Regi�n de cach� (opcional)
+        }
+    },
+    "RateLimitOptions": {
+        "ClientWhiteList": [],
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 100
+    }
+}
