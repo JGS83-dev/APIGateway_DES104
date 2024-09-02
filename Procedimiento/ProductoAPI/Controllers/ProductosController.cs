@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProductoAPI.Models;
+using StackExchange.Redis;
 
 namespace ProductoAPI.Controllers
 {
@@ -14,23 +16,45 @@ namespace ProductoAPI.Controllers
     public class ProductosController : ControllerBase
     {
         private readonly ProductoContext _context;
+        private readonly IConnectionMultiplexer _redis;
 
-        public ProductosController(ProductoContext context)
+        public ProductosController(ProductoContext context,IConnectionMultiplexer redis)
         {
             _context = context;
+            _redis = redis;
         }
 
         // GET: api/Productos
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Producto>>> GetProducts()
         {
-            return await _context.Products.ToListAsync();
+            var db = _redis.GetDatabase();
+            string cacheKey = "productoList";
+            var productosCache = await db.StringGetAsync(cacheKey);
+
+            if (!productosCache.IsNullOrEmpty)
+            {
+                return JsonSerializer.Deserialize<List<Producto>>(productosCache);
+            }
+
+            var productos = await _context.Products.ToListAsync();
+            await db.StringSetAsync(cacheKey,JsonSerializer.Serialize(productos),TimeSpan.FromMinutes(10));
+            return productos;
         }
 
         // GET: api/Productos/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Producto>> GetProducto(int id)
         {
+            var db = _redis.GetDatabase();
+            string cacheKey = "producto_"+id.ToString();
+            var productoCache = await db.StringGetAsync(cacheKey);
+
+            if (!productoCache.IsNullOrEmpty)
+            {
+                return JsonSerializer.Deserialize<Producto>(productoCache);
+            }
+
             var producto = await _context.Products.FindAsync(id);
 
             if (producto == null)
@@ -38,6 +62,7 @@ namespace ProductoAPI.Controllers
                 return NotFound();
             }
 
+            await db.StringSetAsync(cacheKey, JsonSerializer.Serialize(producto), TimeSpan.FromMinutes(10));
             return producto;
         }
 
@@ -56,6 +81,12 @@ namespace ProductoAPI.Controllers
             try
             {
                 await _context.SaveChangesAsync();
+
+                var db = _redis.GetDatabase();
+                string cacheKey = "producto_" + id.ToString();
+                var cacheKeyList = "productoList";
+                await db.KeyDeleteAsync(cacheKey);
+                await db.KeyDeleteAsync(cacheKeyList);
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -79,6 +110,9 @@ namespace ProductoAPI.Controllers
         {
             _context.Products.Add(producto);
             await _context.SaveChangesAsync();
+            var db = _redis.GetDatabase();
+            var cacheKeyList = "productoList";
+            await db.KeyDeleteAsync(cacheKeyList);
 
             return CreatedAtAction("GetProducto", new { id = producto.Id }, producto);
         }
@@ -95,6 +129,12 @@ namespace ProductoAPI.Controllers
 
             _context.Products.Remove(producto);
             await _context.SaveChangesAsync();
+
+            var db = _redis.GetDatabase();
+            string cacheKey = "producto_" + id.ToString();
+            var cacheKeyList = "productoList";
+            await db.KeyDeleteAsync(cacheKey);
+            await db.KeyDeleteAsync(cacheKeyList);
 
             return NoContent();
         }
