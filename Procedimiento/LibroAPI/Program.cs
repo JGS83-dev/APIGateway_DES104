@@ -1,6 +1,7 @@
 
 using Microsoft.EntityFrameworkCore;
 using LibroAPI.Models;
+using StackExchange.Redis;
 
 namespace LibroAPI
 {
@@ -14,6 +15,17 @@ namespace LibroAPI
             builder.Services.AddDbContext<LibroContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
             );
+
+            builder.Services.AddStackExchangeRedisOutputCache(opciones =>
+            {
+                opciones.Configuration = builder.Configuration.GetConnectionString("redis");
+            });
+
+            builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+            {
+                var configuration = ConfigurationOptions.Parse(builder.Configuration.GetConnectionString("redis"), true);
+                return ConnectionMultiplexer.Connect(configuration);
+            });
 
             // Add services to the container.
 
@@ -32,7 +44,7 @@ namespace LibroAPI
             }
 
             app.UseHttpsRedirection();
-
+            app.UseOutputCache();
             app.UseAuthorization();
 
 
